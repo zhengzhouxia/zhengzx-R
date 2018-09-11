@@ -1,0 +1,91 @@
+library(airway)
+data("airway")
+exprSet=assay(airway)
+group_list=colData(airway)[,3]
+
+#####DESeq2
+suppressMessages(library(DESeq2)) #加载DESeq2包
+(colData <- data.frame(row.names=colnames(exprSet), group_list=group_list) )
+dds <- DESeqDataSetFromMatrix(countData = exprSet,
+                              colData = colData,
+                              design = ~ group_list)
+dds <- DESeq(dds)
+res <- results(dds, contrast=c("group_list","trt","untrt"))
+resOrdered <- res[order(res$padj),]
+head(resOrdered)
+DEG=as.data.frame(resOrdered)
+DEG=na.omit(DEG)
+DESeq2_DEG=na.omit(DEG)
+
+####edgeR
+library(edgeR)
+d <- DGEList(counts=exprSet,group=factor(group_list))
+d$samples$lib.size <- colSums(d$counts)
+d <- calcNormFactors(d)
+d$samples
+# The glm approach to multiple groups is similar to the classic approach, but permits more general comparisons to be made
+dge=d
+
+design <- model.matrix(~0+factor(group_list))
+rownames(design)<-colnames(dge)
+colnames(design)<-levels(factor(group_list))
+
+dge <- estimateGLMCommonDisp(dge,design)
+dge <- estimateGLMTrendedDisp(dge, design)
+dge <- estimateGLMTagwiseDisp(dge, design)
+
+fit <- glmFit(dge, design)
+
+lrt <- glmLRT(fit,  contrast=c(1,0))
+
+nrDEG=topTags(lrt, n=nrow(exprSet))
+nrDEG=as.data.frame(nrDEG)
+edgeR_DEG=na.omit(nrDEG)
+#write.csv(nrDEG,"DEG_edgeR.csv",quote = F)
+
+####limma
+suppressMessages(library(limma))
+design <- model.matrix(~0+factor(group_list))
+colnames(design)=levels(factor(group_list))
+rownames(design)=colnames(exprSet)
+
+dge <- DGEList(counts=exprSet)
+dge <- calcNormFactors(dge)
+logCPM <- cpm(dge, log=TRUE, prior.count=3)
+
+v <- voom(dge,design,plot=TRUE, normalize="quantile")
+fit <- lmFit(v, design)
+
+group_list
+cont.matrix=makeContrasts(contrasts=c('untrt-trt'),levels = design)
+fit2=contrasts.fit(fit,cont.matrix)
+fit2=eBayes(fit2)
+
+tempOutput = topTable(fit2, coef='untrt-trt', n=Inf)
+limma_DEG = na.omit(tempOutput)
+#write.csv(DEG_limma_voom,"DEG_limma_voom.csv",quote = F)
+
+
+############### ,
+a=ls()
+rm(list=a[a!="limma_DEG" & a!="DESeq2_DEG" & a!= "edgeR_DEG"],a)
+
+#比较
+a1=data.frame(gene=rownames(limma_DEG),limma=limma_DEG$logFC)
+
+a2=data.frame(gene=rownames(DESeq2_DEG),DESeq2=DESeq2_DEG$log2FoldChange)
+
+a3=data.frame(gene=rownames(edgeR_DEG),edgeR=edgeR_DEG$logFC)
+
+tmp = merge(a1, a2, by = 'gene')
+plot(tmp[,2:3])
+
+
+
+
+
+
+
+
+
+
