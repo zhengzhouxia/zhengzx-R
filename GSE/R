@@ -1,0 +1,79 @@
+#rm(list=ls())
+#gc()
+###GSE42872
+###GEO
+#利用GEOquery包得到GSE42872的数据
+if(F){
+  library(GEOquery)
+  eSet <- getGEO('GSE42872', destdir=".",
+                 AnnotGPL = F,
+                 getGPL = F)
+  save(eSet,file='GSE42872_eSet.Rdata')
+}
+load('GSE42872_eSet.Rdata')
+b = eSet[[1]]
+raw_exprSet=exprs(b) 
+group_list=c(rep('control',3),rep('case',3))
+save(raw_exprSet,group_list,
+     file='GSE42872_raw_exprSet.Rdata')
+
+
+#####
+
+###直接去GEO网站下载的GSE42872数据，读入表达矩阵的方法
+a <- read.table('GSE42872_series_matrix.txt.gz',sep = '\t', 
+                   fill = T, header = T,quote = "" ,comment.char ="!")
+
+rownames(a) = a[,1]
+a=a[,-1]
+
+#id
+library(hugene10sttranscriptcluster.db)
+ids=toTable(hugene10sttranscriptclusterSYMBOL)
+length(unique(ids$symbol))
+tail(sort(table(ids$symbol)))
+table(sort(table(ids$symbol)))
+plot(table(sort(table(ids$symbol))))
+
+exprSet=a
+table(rownames(exprSet) %in% ids$probe_id)
+dim(exprSet)
+exprSet=exprSet[rownames(exprSet) %in% ids$probe_id,]
+dim(exprSet)
+
+ids=ids[match(rownames(exprSet),ids$probe_id),]
+head(ids)
+exprSet[1:5,1:5]
+
+jimmy <- function(exprSet,ids){
+  
+  
+  tmp = by(exprSet,
+           ids$symbol,
+           function(x) rownames(x)[which.max(rowMeans(x))] )
+  
+  tmp = by(exprSet,
+           ids$symbol,
+           function(x) rownames(exprSet)[which.max(rowMeans(exprSet))] )
+  
+  
+  
+  probes = as.character(tmp) 
+  print(dim(exprSet))
+  exprSet=exprSet[rownames(exprSet) %in% probes ,]
+  
+  print(dim(exprSet))
+  rownames(exprSet)=ids[match(rownames(exprSet),ids$probe_id),2]
+  return(exprSet)
+}
+
+new_exprSet <- jimmy(exprSet,ids)
+
+save(new_exprSet,group_list,
+     file='GSE42872_new_exprSet.Rdata')
+
+load(file='GSE42872_new_exprSet.Rdata')
+exprSet=new_exprSet
+####
+biocLite("hugene10sttranscriptcluster.db")
+
